@@ -8,3 +8,7 @@ class BaseException(Exception):
 
 class NotFoundException(BaseException):
     message = "Not Found"
+
+
+class RepositoryInsertError(BaseException):
+    message = "Erro ao inserir no repositório"

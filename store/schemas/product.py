@@ -2,6 +2,8 @@ from decimal import Decimal
 from typing import Annotated, Optional
 from bson import Decimal128
 from pydantic import AfterValidator, Field
+from datetime import datetime
+
 from store.schemas.base import BaseSchemaMixin, OutSchema
 
 
@@ -17,7 +19,7 @@ class ProductIn(ProductBase, BaseSchemaMixin):
 
 
 class ProductOut(ProductIn, OutSchema):
-    ...
+    updated_at: Optional[datetime] = Field(None, description="Última atualização do produto")
 
 
 def convert_decimal_128(v):
@@ -31,6 +33,9 @@ class ProductUpdate(BaseSchemaMixin):
     quantity: Optional[int] = Field(None, description="Product quantity")
     price: Optional[Decimal_] = Field(None, description="Product price")
     status: Optional[bool] = Field(None, description="Product status")
+    updated_at: Optional[datetime] = Field(
+        None, description="Data/hora da última atualização (se não informado, será gerado automaticamente)"
+    )
 
 
 class ProductUpdateOut(ProductOut):

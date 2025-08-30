@@ -1,11 +1,14 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
+from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 import pymongo
+from pymongo.errors import PyMongoError
+
 from store.db.mongo import db_client
 from store.models.product import ProductModel
 from store.schemas.product import ProductIn, ProductOut, ProductUpdate, ProductUpdateOut
-from store.core.exceptions import NotFoundException
+from store.core.exceptions import NotFoundException, RepositoryInsertError
 
 
 class ProductUsecase:
@@ -16,7 +19,10 @@ class ProductUsecase:
 
     async def create(self, body: ProductIn) -> ProductOut:
         product_model = ProductModel(**body.model_dump())
-        await self.collection.insert_one(product_model.model_dump())
+        try:
+            await self.collection.insert_one(product_model.model_dump())
+        except PyMongoError as e:
+            raise RepositoryInsertError("Erro ao inserir produto") from e
 
         return ProductOut(**product_model.model_dump())
 
@@ -28,15 +34,34 @@ class ProductUsecase:
 
         return ProductOut(**result)
 
-    async def query(self) -> List[ProductOut]:
-        return [ProductOut(**item) async for item in self.collection.find()]
+    async def query(
+        self, min_price: Optional[float] = None, max_price: Optional[float] = None
+    ) -> List[ProductOut]:
+        filters = {}
+        if min_price is not None or max_price is not None:
+            filters["price"] = {}
+            if min_price is not None:
+                filters["price"]["$gt"] = min_price
+            if max_price is not None:
+                filters["price"]["$lt"] = max_price
+
+        cursor = self.collection.find(filters)
+        return [ProductOut(**item) async for item in cursor]
 
     async def update(self, id: UUID, body: ProductUpdate) -> ProductUpdateOut:
+        update_data = body.model_dump(exclude_none=True)
+
+        # garantir que updated_at seja atualizado (ou sobrescrito se vier no body)
+        update_data["updated_at"] = update_data.get("updated_at", datetime.utcnow())
+
         result = await self.collection.find_one_and_update(
             filter={"id": id},
-            update={"$set": body.model_dump(exclude_none=True)},
+            update={"$set": update_data},
             return_document=pymongo.ReturnDocument.AFTER,
         )
+
+        if not result:
+            raise NotFoundException(message=f"Product not found with filter: {id}")
 
         return ProductUpdateOut(**result)
 
